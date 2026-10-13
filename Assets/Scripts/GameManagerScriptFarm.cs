@@ -1,15 +1,19 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
-public class GameOverManager : MonoBehaviour
+public class GameOverManagerScriptFarm : MonoBehaviour
 {
     public TMP_Text gameOverText;
+    public GameObject restartButton;
     private int objetosQuePasaron;
     private bool juegoTerminado;
 
     void Start()
     {
         gameOverText.gameObject.SetActive(false);
+        restartButton.gameObject.SetActive(false);
+        Time.timeScale = 1f;
     }
 
     public void ObjetoPaso()
@@ -22,6 +26,7 @@ public class GameOverManager : MonoBehaviour
         {
             juegoTerminado = true;
             gameOverText.gameObject.SetActive(true);
+            Time.timeScale = 0f;
         }
     }
 }

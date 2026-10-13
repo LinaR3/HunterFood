@@ -4,7 +4,18 @@ public class DestroyOutOfBounds : MonoBehaviour
 {
     public float topBound = 30f;
     public float lowerBound = -10f;
-    public GameOverManager gameOverManager;
+
+    private GameOverManagerScriptFarm gameOverManager;
+
+    void Start()
+    {
+        gameOverManager = FindFirstObjectByType<GameOverManagerScriptFarm>();
+
+        if (gameOverManager == null)
+        {
+            Debug.LogError("No se encontró GameOverManagerScriptFarm en la escena.");
+        }
+    }
 
     void Update()
     {
@@ -14,8 +25,13 @@ public class DestroyOutOfBounds : MonoBehaviour
         }
         else if (transform.position.z < lowerBound)
         {
-            gameOverManager.ObjetoPaso();
+            if (gameOverManager != null)
+            {
+                gameOverManager.ObjetoPaso();
+            }
+
             Destroy(gameObject);
         }
     }
 }
+
