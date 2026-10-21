@@ -2,22 +2,24 @@ using UnityEngine;
 
 public class DetectCollisions : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-
     private void OnTriggerEnter(Collider other)
     {
-        
-        Destroy(gameObject);
-    
+        Rigidbody appleBody = other.attachedRigidbody;
+        if (appleBody == null || appleBody.GetComponent<MoveFoward>() == null)
+        {
+            return;
+        }
+
+        Destroy(appleBody.gameObject);
+
+        AnimalHunger animalHunger = GetComponent<AnimalHunger>();
+        if (animalHunger != null)
+        {
+            animalHunger.FeedWithApple();
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 }
