@@ -72,6 +72,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         if (spawnManager == null) spawnManager = FindFirstObjectByType<SpawnManager>();
         CaptureGameplayDefaults();
         LoadPreferences();
+        HunterFoodVFX.InitializeAmbient(ambienceEnabled);
         ConfigureStartScreen();
         CreateRuntimeUI();
         ShowStartScreen();
@@ -542,6 +543,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     {
         ambienceEnabled = !ambienceEnabled;
         RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f;
+        HunterFoodVFX.SetAmbientEnabled(ambienceEnabled);
         PlayerPrefs.SetInt("HunterFood.Ambience", ambienceEnabled ? 1 : 0);
     }
 

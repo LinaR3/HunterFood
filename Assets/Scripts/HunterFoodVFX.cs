@@ -6,6 +6,34 @@ using UnityEngine.UI;
 public static class HunterFoodVFX
 {
     private static Material particleMaterial;
+    private static ParticleSystem ambientLeaves;
+    private static Mesh leafMesh;
+
+    public static void InitializeAmbient(bool enabled)
+    {
+        if (ambientLeaves == null)
+            ambientLeaves = CreateAmbientLeaves();
+        SetAmbientEnabled(enabled);
+    }
+
+    public static void SetAmbientEnabled(bool enabled)
+    {
+        if (ambientLeaves == null)
+        {
+            if (!enabled) return;
+            ambientLeaves = CreateAmbientLeaves();
+        }
+
+        if (enabled && !ambientLeaves.isPlaying)
+        {
+            ambientLeaves.Play();
+            ambientLeaves.Emit(14);
+        }
+        else if (!enabled && ambientLeaves.isPlaying)
+        {
+            ambientLeaves.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
 
     public static void AppleImpact(Vector3 position)
     {
@@ -127,6 +155,86 @@ public static class HunterFoodVFX
 
         particles.Emit(count);
         particles.Play();
+    }
+
+    private static ParticleSystem CreateAmbientLeaves()
+    {
+        GameObject ambientObject = new GameObject("Ambient Low Poly Leaves");
+        ambientObject.transform.position = new Vector3(0f, 0.9f, 7.5f);
+
+        ParticleSystem particles = ambientObject.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = particles.main;
+        main.duration = 12f;
+        main.loop = true;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(8f, 14f);
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.14f, 0.28f);
+        main.startColor = new Color(0.92f, 0.88f, 0.61f, 0.6f);
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 32;
+        main.useUnscaledTime = true;
+
+        ParticleSystem.EmissionModule emission = particles.emission;
+        emission.rateOverTime = 1.5f;
+        ParticleSystem.ShapeModule shape = particles.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(38f, 0.7f, 34f);
+        shape.randomDirectionAmount = 0f;
+
+        ParticleSystem.VelocityOverLifetimeModule velocity = particles.velocityOverLifetime;
+        velocity.enabled = true;
+        velocity.x = new ParticleSystem.MinMaxCurve(0.05f, 0.22f);
+        velocity.y = new ParticleSystem.MinMaxCurve(-0.015f, 0.015f);
+        velocity.z = new ParticleSystem.MinMaxCurve(-0.08f, 0.08f);
+
+        ParticleSystem.RotationOverLifetimeModule rotation = particles.rotationOverLifetime;
+        rotation.enabled = true;
+        rotation.z = new ParticleSystem.MinMaxCurve(-0.55f, 0.55f);
+
+        ParticleSystem.ColorOverLifetimeModule fade = particles.colorOverLifetime;
+        fade.enabled = true;
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.9f, 0.86f, 0.62f, 1f), 0f),
+                new GradientColorKey(new Color(0.76f, 0.82f, 0.5f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.52f, 0.16f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        fade.color = gradient;
+
+        ParticleSystemRenderer renderer = ambientObject.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Mesh;
+        renderer.alignment = ParticleSystemRenderSpace.View;
+        renderer.mesh = GetLeafMesh();
+        renderer.material = GetParticleMaterial();
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        return particles;
+    }
+
+    private static Mesh GetLeafMesh()
+    {
+        if (leafMesh != null) return leafMesh;
+
+        leafMesh = new Mesh { name = "Low Poly Leaf Particle Mesh" };
+        leafMesh.vertices = new[]
+        {
+            new Vector3(-0.5f, 0f, 0f),
+            new Vector3(0.15f, 0.28f, 0f),
+            new Vector3(0.5f, 0f, 0f),
+            new Vector3(0.15f, -0.28f, 0f)
+        };
+        leafMesh.uv = new[] { new Vector2(0f, 0.5f), new Vector2(0.5f, 1f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0f) };
+        leafMesh.triangles = new[] { 0, 1, 3, 1, 2, 3, 3, 1, 0, 3, 2, 1 };
+        leafMesh.RecalculateNormals();
+        leafMesh.RecalculateBounds();
+        return leafMesh;
     }
 
     private static void ShowHeart(Vector3 position)
