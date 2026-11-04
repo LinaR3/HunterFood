@@ -35,9 +35,11 @@ public class AnimalHunger : MonoBehaviour
 
         applesEaten = Mathf.Min(applesEaten + 1, applesRequired);
         UpdateBar();
+        HunterFoodVFX.AppleImpact(transform.position + Vector3.up * 0.45f);
 
         if (applesEaten >= applesRequired)
         {
+            HunterFoodVFX.AnimalSatisfied(transform.position);
             Destroy(gameObject);
         }
     }
