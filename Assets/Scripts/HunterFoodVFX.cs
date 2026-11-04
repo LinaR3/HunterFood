@@ -18,6 +18,12 @@ public static class HunterFoodVFX
         Burst(position + Vector3.up * 0.6f, new Color(1f, 0.9f, 0.24f, 1f), 14, 0.16f, 1.8f, 0.72f);
     }
 
+    public static void LevelCompleted(Vector3 position)
+    {
+        Burst(position, new Color(1f, 0.78f, 0.08f, 1f), 36, 0.22f, 2.2f, 1.8f);
+        Burst(position + Vector3.up * 0.35f, new Color(1f, 0.96f, 0.72f, 1f), 20, 0.14f, 1.6f, 1.5f);
+    }
+
     public static void FoodCollected(Vector3 worldPosition, TMP_Text counter)
     {
         if (counter == null) return;
@@ -69,6 +75,7 @@ public static class HunterFoodVFX
         main.startSize = new ParticleSystem.MinMaxCurve(size * 0.65f, size);
         main.startColor = color;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.useUnscaledTime = true;
         main.maxParticles = Mathf.Max(1, count);
         main.stopAction = ParticleSystemStopAction.Destroy;
 

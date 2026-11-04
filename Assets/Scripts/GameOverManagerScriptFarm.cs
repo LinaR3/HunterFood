@@ -1,4 +1,5 @@
 using TMPro;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -24,6 +25,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private static readonly Color Gold = new Color(1f, 0.78f, 0.02f, 1f);
     private static readonly Color Panel = new Color(0.035f, 0.045f, 0.055f, 0.96f);
     private static readonly Color Row = new Color(0.085f, 0.095f, 0.105f, 0.98f);
+    private const int StartingApplesPerLevel = 20;
 
     private int objectsPassed;
     private bool gameOver;
@@ -32,6 +34,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private bool settingsPausedGame;
     private bool settingsFromStartScreen;
     private int selectedLevel = 1;
+    private int currentLevel = 1;
     private int selectedDifficulty = 1;
     private int applesFedThisLevel;
     private bool ambienceEnabled = true;
@@ -45,12 +48,14 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private TMP_FontAsset uiFont;
     private GameObject pauseRoot;
     private GameObject settingsRoot;
+    private GameObject levelCompleteRoot;
     private GameObject gameplayHud;
     private GameObject pauseButtonRoot;
     private GameObject settingsButtonRoot;
     private TMP_Text[] settingsValues;
     private TMP_Text levelHud;
     private TMP_Text foodHud;
+    private bool levelTransitioning;
 
     private void Awake()
     {
@@ -89,6 +94,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     {
         volume = PlayerPrefs.GetFloat("HunterFood.Volume", 1f);
         selectedLevel = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Level", 1), 1, 5);
+        currentLevel = selectedLevel;
         selectedDifficulty = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Difficulty", 1), 0, 2);
         ambienceEnabled = PlayerPrefs.GetInt("HunterFood.Ambience", 1) != 0;
         AudioListener.volume = volume;
@@ -168,6 +174,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         gameplayHud = CreateHud(canvas);
         pauseRoot = CreatePausePanel(canvas);
         settingsRoot = CreateSettingsPanel(canvas);
+        levelCompleteRoot = CreateLevelCompletePanel(canvas);
         pauseButtonRoot = BuildTopControl(canvas, "Pausa", new Vector2(-130f, -42f), false, TogglePause).gameObject;
         Transform savedSettingsButton = canvas.Find("Settings Button");
         Button settingsButton = savedSettingsButton != null ? savedSettingsButton.GetComponent<Button>() : null;
@@ -185,6 +192,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         gameplayHud.SetActive(false);
         pauseRoot.SetActive(false);
         settingsRoot.SetActive(false);
+        levelCompleteRoot.SetActive(false);
         pauseButtonRoot.SetActive(false);
     }
 
@@ -245,6 +253,15 @@ public class GameOverManagerScriptFarm : MonoBehaviour
 
         BuildModalButton(card, "GUARDAR", new Vector2(0f, -280f), new Vector2(330f, 76f), CloseSettings, false, true);
         UpdateSettingsLabels();
+        return root;
+    }
+
+    private GameObject CreateLevelCompletePanel(Transform parent)
+    {
+        GameObject root = CreateOverlay(parent, "Level Complete Overlay");
+        RectTransform card = CreatePanelCard(root.transform, "Level Complete Panel", new Vector2(980f, 300f));
+        CreateText(card, "¡NIVEL COMPLETADO!", new Vector2(0f, 35f), new Vector2(900f, 110f), 76f, Gold, TextAlignmentOptions.Center, true);
+        CreateText(card, "PREPÁRATE PARA EL SIGUIENTE RETO", new Vector2(0f, -65f), new Vector2(850f, 64f), 34f, Color.white, TextAlignmentOptions.Center);
         return root;
     }
 
@@ -508,6 +525,8 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private void CycleLevel()
     {
         selectedLevel = selectedLevel % 5 + 1;
+        if (started) currentLevel = selectedLevel;
+        else currentLevel = selectedLevel;
         PlayerPrefs.SetInt("HunterFood.Level", selectedLevel);
         ApplySelectedSettings();
     }
@@ -538,27 +557,66 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         if (spawnManager == null) return;
         float[] speeds = { 0.8f, 1f, 1.2f };
         float[] intervals = { 1.25f, 1f, 0.8f };
-        float levelFactor = 1f + (selectedLevel - 1) * 0.08f;
+        float levelFactor = 1f + (Mathf.Max(1, currentLevel) - 1) * 0.08f;
         spawnManager.animalSpeed = normalAnimalSpeed * speeds[selectedDifficulty] * levelFactor;
         spawnManager.spawnInterval = normalSpawnInterval * intervals[selectedDifficulty] / levelFactor;
         spawnManager.foxSpeed = normalFoxSpeed * speeds[selectedDifficulty] * levelFactor;
         spawnManager.foxSpawnInterval = normalFoxInterval * intervals[selectedDifficulty] / levelFactor;
-        spawnManager.applesToSatisfyAnimal = Mathf.Max(1, normalApples + selectedDifficulty - 1 + (selectedLevel - 1) / 2);
+        spawnManager.applesToSatisfyAnimal = Mathf.Max(1, normalApples + selectedDifficulty - 1 + (Mathf.Max(1, currentLevel) - 1) / 2);
         spawnManager.UpdateSpawnSchedule();
         UpdateHud();
     }
 
     private void UpdateHud()
     {
-        if (levelHud != null) levelHud.text = "NIVEL " + selectedLevel;
-        if (foodHud != null) foodHud.text = "COMIDA " + applesFedThisLevel.ToString("00") + "/20";
+        if (levelHud != null) levelHud.text = "NIVEL " + currentLevel;
+        if (foodHud != null) foodHud.text = "COMIDA " + applesFedThisLevel.ToString("00") + "/" + ApplesTargetForCurrentLevel();
     }
 
     public void RegisterAppleFed(Vector3 worldPosition)
     {
+        if (!started || gameOver || levelTransitioning) return;
         applesFedThisLevel++;
         UpdateHud();
         HunterFoodVFX.FoodCollected(worldPosition, foodHud);
+        if (applesFedThisLevel >= ApplesTargetForCurrentLevel())
+        {
+            levelTransitioning = true;
+            Time.timeScale = 0f;
+            if (levelCompleteRoot != null)
+            {
+                levelCompleteRoot.SetActive(true);
+                levelCompleteRoot.transform.SetAsLastSibling();
+            }
+            HunterFoodVFX.LevelCompleted(GetFieldCenter());
+            StartCoroutine(AdvanceLevelAfterCelebration());
+        }
+    }
+
+    private int ApplesTargetForCurrentLevel() => StartingApplesPerLevel + (Mathf.Max(1, currentLevel) - 1) * 10;
+
+    private Vector3 GetFieldCenter()
+    {
+        Camera camera = Camera.main;
+        if (camera != null)
+        {
+            Ray ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            Plane ground = new Plane(Vector3.up, Vector3.zero);
+            if (ground.Raycast(ray, out float distance)) return ray.GetPoint(distance);
+        }
+        return Vector3.zero;
+    }
+
+    private IEnumerator AdvanceLevelAfterCelebration()
+    {
+        yield return new WaitForSecondsRealtime(2f);
+        currentLevel++;
+        applesFedThisLevel = 0;
+        ApplySelectedSettings();
+        UpdateHud();
+        if (levelCompleteRoot != null) levelCompleteRoot.SetActive(false);
+        levelTransitioning = false;
+        if (started && !isPaused && !gameOver) Time.timeScale = 1f;
     }
 
     private void UpdateSettingsLabels()
