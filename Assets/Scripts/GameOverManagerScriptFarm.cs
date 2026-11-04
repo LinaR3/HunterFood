@@ -136,7 +136,8 @@ public class GameOverManagerScriptFarm : MonoBehaviour
                 image.raycastTarget = true;
             }
             SetRect(button.GetComponent<RectTransform>(), new Vector2(0f, -155f), new Vector2(700f, 120f));
-            AddAngularFrame(button.transform, 5f, 0.16f);
+            if (button.transform.Find("Yellow Angular Frame") == null)
+                AddAngularFrame(button.transform, 5f, 0.16f);
             button.onClick.AddListener(StartGame);
             button.navigation = new Navigation { mode = Navigation.Mode.Automatic };
 
@@ -160,7 +161,18 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         pauseRoot = CreatePausePanel(canvas);
         settingsRoot = CreateSettingsPanel(canvas);
         pauseButtonRoot = BuildTopControl(canvas, "Pausa", new Vector2(-130f, -42f), false, TogglePause).gameObject;
-        settingsButtonRoot = BuildTopControl(canvas, "Ajustes", new Vector2(-42f, -42f), true, OpenSettings).gameObject;
+        Transform savedSettingsButton = canvas.Find("Settings Button");
+        Button settingsButton = savedSettingsButton != null ? savedSettingsButton.GetComponent<Button>() : null;
+        if (settingsButton == null)
+        {
+            settingsButton = BuildTopControl(canvas, "Ajustes", new Vector2(-42f, -42f), true, OpenSettings);
+        }
+        else
+        {
+            settingsButton.onClick.RemoveAllListeners();
+            settingsButton.onClick.AddListener(OpenSettings);
+        }
+        settingsButtonRoot = settingsButton.gameObject;
 
         gameplayHud.SetActive(false);
         pauseRoot.SetActive(false);
