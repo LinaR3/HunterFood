@@ -75,6 +75,7 @@ public class FoxController : MonoBehaviour
         Rigidbody appleBody = other.attachedRigidbody;
         if (appleBody != null && appleBody.GetComponent<MoveFoward>() != null)
         {
+            HunterFoodVFX.AppleStolen(appleBody.position);
             Destroy(appleBody.gameObject);
         }
     }

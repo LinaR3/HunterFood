@@ -36,6 +36,17 @@ public static class HunterFoodVFX
         Burst(position, warning, 6, 0.12f, 0.7f, 0.42f);
     }
 
+    public static void AppleStolen(Vector3 position)
+    {
+        Burst(position, new Color(0.12f, 0.09f, 0.065f, 0.9f), 11, 0.18f, 1.1f, 0.56f);
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) return;
+        CameraShakeEffect shake = mainCamera.GetComponent<CameraShakeEffect>();
+        if (shake == null) shake = mainCamera.gameObject.AddComponent<CameraShakeEffect>();
+        shake.Trigger(0.12f, 0.095f);
+    }
+
     public static void FoodCollected(Vector3 worldPosition, TMP_Text counter)
     {
         if (counter == null) return;
@@ -180,5 +191,43 @@ public sealed class FoodHudParticle : MonoBehaviour
         rect.anchoredPosition = Vector2.LerpUnclamped(start, destination, eased);
         rect.localScale = Vector3.one * (1f - t * 0.65f);
         if (t >= 1f) Destroy(gameObject);
+    }
+}
+
+public sealed class CameraShakeEffect : MonoBehaviour
+{
+    private Vector3 originalLocalPosition;
+    private float duration;
+    private float remaining;
+    private float strength;
+
+    private void Awake()
+    {
+        originalLocalPosition = transform.localPosition;
+    }
+
+    public void Trigger(float shakeDuration, float shakeStrength)
+    {
+        duration = Mathf.Max(duration, shakeDuration);
+        remaining = Mathf.Max(remaining, shakeDuration);
+        strength = Mathf.Max(strength, shakeStrength);
+    }
+
+    private void LateUpdate()
+    {
+        if (remaining <= 0f) return;
+        remaining -= Time.unscaledDeltaTime;
+        float fade = duration > 0f ? Mathf.Clamp01(remaining / duration) : 0f;
+        transform.localPosition = originalLocalPosition + Random.insideUnitSphere * (strength * fade);
+        if (remaining <= 0f)
+        {
+            transform.localPosition = originalLocalPosition;
+            Destroy(this);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        transform.localPosition = originalLocalPosition;
     }
 }
