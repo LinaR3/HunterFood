@@ -30,6 +30,17 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private string[] initialButtonLabels;
     private TMP_Text gameOverSubtitle;
     private TMP_FontAsset menuFont;
+    private GameObject pauseRoot;
+    private GameObject settingsRoot;
+    private bool isPaused;
+    private bool started;
+    private int selectedLevel = 1;
+    private int selectedDifficulty = 1;
+    private bool ambienceEnabled = true;
+    private bool settingsPausedGame;
+    private float normalAmbientIntensity = 1f;
+    private GameObject pauseButtonRoot;
+    private GameObject settingsButtonRoot;
 
     private void Start()
     {
@@ -48,6 +59,14 @@ public class GameOverManagerScriptFarm : MonoBehaviour
             normalFoxInterval = spawnManager.foxSpawnInterval;
             normalApples = spawnManager.applesToSatisfyAnimal;
         }
+        normalAmbientIntensity = RenderSettings.ambientIntensity;
+        volume = PlayerPrefs.GetFloat("HunterFood.Volume", 1f);
+        selectedLevel = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Level", 1), 1, 5);
+        selectedDifficulty = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Difficulty", 1), 0, 2);
+        ambienceEnabled = PlayerPrefs.GetInt("HunterFood.Ambience", 1) != 0;
+        AudioListener.volume = volume;
+        RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f;
+        ApplySelectedSettings();
         for (int i = 0; i < welcomeButtons.Length; i++)
         {
             int index = i;
@@ -59,6 +78,8 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         for (int i = 0; i < welcomeButtonLabels.Length; i++)
             initialButtonLabels[i] = welcomeButtonLabels[i] != null ? welcomeButtonLabels[i].text : mainLabels[Mathf.Min(i, mainLabels.Length - 1)];
         if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(true);
+        CreateGameplayControls();
+        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
         ShowMainMenu();
     }
 
@@ -83,10 +104,10 @@ public class GameOverManagerScriptFarm : MonoBehaviour
                 backdrop.raycastTarget = true;
             }
 
-            CreateCard(welcomeMenuRoot.transform, "Welcome Menu Card", new Vector2(1000f, 1040f));
-            SetRect(welcomeTitle != null ? welcomeTitle.rectTransform : null, new Vector2(0f, 382f), new Vector2(740f, 108f));
-            if (welcomeTitle != null) StyleText(welcomeTitle, 82f, 56f, 90f, new Color(1f, 0.78f, 0.3f));
-            SetRect(welcomeBody != null ? welcomeBody.rectTransform : null, new Vector2(0f, 290f), new Vector2(720f, 130f));
+            CreateCard(welcomeMenuRoot.transform, "Welcome Menu Card", new Vector2(1000f, 620f));
+            SetRect(welcomeTitle != null ? welcomeTitle.rectTransform : null, new Vector2(0f, 170f), new Vector2(820f, 150f));
+            if (welcomeTitle != null) StyleText(welcomeTitle, 112f, 64f, 120f, new Color(1f, 0.78f, 0.04f));
+            SetRect(welcomeBody != null ? welcomeBody.rectTransform : null, new Vector2(0f, 65f), new Vector2(720f, 100f));
             if (welcomeBody != null) StyleText(welcomeBody, 30f, 22f, 34f, new Color(1f, 0.94f, 0.78f));
 
             for (int i = 0; i < welcomeButtons.Length; i++)
@@ -94,13 +115,13 @@ public class GameOverManagerScriptFarm : MonoBehaviour
                 Button button = welcomeButtons[i];
                 if (button == null) continue;
                 RectTransform buttonRect = button.GetComponent<RectTransform>();
-                SetRect(buttonRect, new Vector2(0f, 174f - i * 76f), new Vector2(560f, 62f));
+                SetRect(buttonRect, new Vector2(0f, -100f), new Vector2(560f, 92f));
                 buttonRect.localScale = Vector3.one;
                 Image buttonImage = button.GetComponent<Image>();
-                if (buttonImage != null) buttonImage.color = new Color(0.19f, 0.39f, 0.24f, 1f);
+                if (buttonImage != null) buttonImage.color = new Color(0.92f, 0.59f, 0.06f, 1f);
                 button.navigation = new Navigation { mode = Navigation.Mode.Automatic };
                 if (i < welcomeButtonLabels.Length && welcomeButtonLabels[i] != null)
-                    StyleText(welcomeButtonLabels[i], 29f, 22f, 32f, new Color(1f, 0.96f, 0.86f));
+                    StyleText(welcomeButtonLabels[i], 42f, 28f, 46f, new Color(0.12f, 0.10f, 0.07f));
             }
         }
 
@@ -224,7 +245,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
 
     private void ShowMainMenu()
     {
-        SetMenu(initialTitle, initialBody, initialButtonLabels, 7, 0);
+        SetMenu("HUNTERFOOD", "Alimenta a los animales. ¡Cuidado con el zorro!", new[] { "JUGAR" }, 1, 0);
     }
 
     private void ShowPage(string title, string body, string[] labels, int count)
@@ -251,7 +272,11 @@ public class GameOverManagerScriptFarm : MonoBehaviour
             }
         }
         // Page-specific buttons map to actions rather than their visible row order.
-        if (title == "Dificultad")
+        if (title == "HUNTERFOOD")
+        {
+            BindActions(new[] { 0 }, count);
+        }
+        else if (title == "Dificultad")
         {
             BindActions(new[] { 7, 8, 9, 10 }, count);
         }
@@ -296,10 +321,149 @@ public class GameOverManagerScriptFarm : MonoBehaviour
 
     private void StartGame()
     {
+        started = true;
+        isPaused = false;
         if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(false);
         if (gameOverRoot != null) gameOverRoot.SetActive(false);
+        if (pauseRoot != null) pauseRoot.SetActive(false);
+        if (settingsRoot != null) settingsRoot.SetActive(false);
+        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(true);
         Time.timeScale = 1f;
     }
+
+    private void Update()
+    {
+        if (started && !gameOver && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P)))
+            TogglePause();
+    }
+
+    private void CreateGameplayControls()
+    {
+        Transform canvas = welcomeMenuRoot != null ? welcomeMenuRoot.transform.parent : null;
+        if (canvas == null) return;
+        pauseRoot = BuildPanel(canvas, "Pause Panel", "PAUSA", new[] { "CONTINUAR", "REINICIAR", "SALIR AL INICIO" }, new System.Action[] { ResumeGame, Reiniciar, ReturnToMenu }, new Vector2(760f, 560f));
+        settingsRoot = BuildPanel(canvas, "Settings Panel", "AJUSTES", new[] { "NIVEL: 1", "SONIDO: SÍ", "AMBIENTACIÓN: SÍ", "DIFICULTAD: NORMAL", "CERRAR" }, new System.Action[] { CycleLevel, ToggleSound, ToggleAmbience, CycleDifficulty, CloseSettings }, new Vector2(820f, 680f));
+        pauseRoot.SetActive(false);
+        settingsRoot.SetActive(false);
+        pauseButtonRoot = BuildButton(canvas, "Pausa", "II", new Vector2(-82f, -76f), TogglePause).gameObject;
+        settingsButtonRoot = BuildButton(canvas, "Ajustes", "", new Vector2(-82f, -164f), OpenSettings).gameObject;
+    }
+
+    private GameObject BuildPanel(Transform parent, string name, string title, string[] labels, System.Action[] actions, Vector2 size)
+    {
+        GameObject root = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        root.transform.SetParent(parent, false);
+        RectTransform full = root.GetComponent<RectTransform>();
+        full.anchorMin = Vector2.zero; full.anchorMax = Vector2.one; full.offsetMin = Vector2.zero; full.offsetMax = Vector2.zero;
+        root.GetComponent<Image>().color = new Color(0.015f, 0.025f, 0.025f, 0.68f);
+        GameObject card = new GameObject(name + " Card", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        card.transform.SetParent(root.transform, false);
+        SetRect(card.GetComponent<RectTransform>(), Vector2.zero, size);
+        card.GetComponent<Image>().color = new Color(0.055f, 0.085f, 0.075f, 0.98f);
+        MakeText(card.transform, title, new Vector2(0f, size.y * 0.36f), new Vector2(size.x - 80f, 90f), 60f, new Color(1f, 0.78f, 0.04f));
+        float rowGap = 82f;
+        float startY = (labels.Length - 1) * rowGap * 0.5f - 20f;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int index = i;
+            BuildButton(card.transform, name + " " + i, labels[i], new Vector2(0f, startY - i * rowGap), () => actions[index]());
+        }
+        return root;
+    }
+
+    private Button BuildButton(Transform parent, string name, string label, Vector2 position, System.Action action)
+    {
+        GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
+        bool compact = parent == (welcomeMenuRoot != null ? welcomeMenuRoot.transform.parent : null);
+        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+        if (compact)
+        {
+            buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(1f, 1f);
+            buttonRect.pivot = new Vector2(1f, 1f);
+            buttonRect.anchoredPosition = position;
+            buttonRect.sizeDelta = new Vector2(70f, 70f);
+        }
+        else SetRect(buttonRect, position, new Vector2(530f, 68f));
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = compact ? new Color(0.04f, 0.07f, 0.06f, 0.9f) : new Color(0.19f, 0.39f, 0.24f, 1f);
+        Button button = buttonObject.GetComponent<Button>();
+        button.onClick.AddListener(() => action());
+        if (compact && name == "Ajustes")
+        {
+            GameObject icon = new GameObject("Settings Gear", typeof(RectTransform), typeof(CanvasRenderer), typeof(GearIconGraphic));
+            icon.transform.SetParent(buttonObject.transform, false);
+            SetRect(icon.GetComponent<RectTransform>(), Vector2.zero, new Vector2(38f, 38f));
+            icon.GetComponent<GearIconGraphic>().color = new Color(1f, 0.78f, 0.18f, 1f);
+        }
+        else
+        {
+            MakeText(buttonObject.transform, label, Vector2.zero, compact ? new Vector2(68f, 68f) : new Vector2(500f, 60f), compact ? 34f : 30f, new Color(1f, 0.9f, 0.55f));
+        }
+        return button;
+    }
+
+    private void MakeText(Transform parent, string value, Vector2 position, Vector2 size, float fontSize, Color color)
+    {
+        GameObject go = new GameObject(value + " Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(parent, false);
+        TMP_Text text = go.GetComponent<TMP_Text>();
+        text.text = value; text.font = menuFont; text.fontSize = fontSize; text.color = color;
+        text.alignment = TextAlignmentOptions.Center; text.enableAutoSizing = true; text.fontSizeMin = 18f; text.fontSizeMax = fontSize;
+        text.raycastTarget = false;
+        SetRect(text.rectTransform, position, size);
+    }
+
+    private void TogglePause()
+    {
+        if (isPaused) ResumeGame();
+        else
+        {
+            isPaused = true;
+            Time.timeScale = 0f;
+            if (pauseRoot != null) { pauseRoot.SetActive(true); pauseRoot.transform.SetAsLastSibling(); }
+        }
+    }
+
+    private void ResumeGame() { isPaused = false; if (pauseRoot != null) pauseRoot.SetActive(false); Time.timeScale = 1f; }
+    private void OpenSettings()
+    {
+        settingsPausedGame = Time.timeScale > 0f;
+        Time.timeScale = 0f;
+        UpdateSettingsLabels();
+        if (settingsRoot != null) { settingsRoot.SetActive(true); settingsRoot.transform.SetAsLastSibling(); }
+    }
+    private void CloseSettings()
+    {
+        if (settingsRoot != null) settingsRoot.SetActive(false);
+        if (!isPaused && settingsPausedGame) Time.timeScale = 1f;
+    }
+    private void ToggleSound() { volume = volume > 0f ? 0f : 1f; AudioListener.volume = volume; PlayerPrefs.SetFloat("HunterFood.Volume", volume); UpdateSettingsLabels(); }
+    private void ToggleAmbience() { ambienceEnabled = !ambienceEnabled; RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f; PlayerPrefs.SetInt("HunterFood.Ambience", ambienceEnabled ? 1 : 0); UpdateSettingsLabels(); }
+    private void CycleLevel() { selectedLevel = selectedLevel % 5 + 1; PlayerPrefs.SetInt("HunterFood.Level", selectedLevel); ApplySelectedSettings(); UpdateSettingsLabels(); }
+    private void CycleDifficulty() { selectedDifficulty = (selectedDifficulty + 1) % 3; PlayerPrefs.SetInt("HunterFood.Difficulty", selectedDifficulty); ApplySelectedSettings(); UpdateSettingsLabels(); }
+    private void ApplySelectedSettings()
+    {
+        if (spawnManager == null) return;
+        float[] speeds = { 0.8f, 1f, 1.2f };
+        float[] intervals = { 1.25f, 1f, 0.8f };
+        float levelFactor = 1f + (selectedLevel - 1) * 0.08f;
+        spawnManager.animalSpeed = normalAnimalSpeed * speeds[selectedDifficulty] * levelFactor;
+        spawnManager.spawnInterval = normalSpawnInterval * intervals[selectedDifficulty] / levelFactor;
+        spawnManager.foxSpeed = normalFoxSpeed * speeds[selectedDifficulty] * levelFactor;
+        spawnManager.foxSpawnInterval = normalFoxInterval * intervals[selectedDifficulty] / levelFactor;
+        spawnManager.applesToSatisfyAnimal = Mathf.Max(1, normalApples + selectedDifficulty - 1 + (selectedLevel - 1) / 2);
+        spawnManager.UpdateSpawnSchedule();
+    }
+    private void UpdateSettingsLabels()
+    {
+        if (settingsRoot == null) return;
+        TMP_Text[] texts = settingsRoot.GetComponentsInChildren<TMP_Text>(true);
+        string[] values = { "NIVEL: " + selectedLevel, "SONIDO: " + (volume > 0f ? "SÍ" : "NO"), "AMBIENTACIÓN: " + (ambienceEnabled ? "SÍ" : "NO"), "DIFICULTAD: " + new[] { "FÁCIL", "NORMAL", "DIFÍCIL" }[selectedDifficulty], "CERRAR" };
+        int found = 0;
+        foreach (TMP_Text text in texts) if (text.text != "AJUSTES" && found < values.Length) text.text = values[found++];
+    }
+    private void ReturnToMenu() { Time.timeScale = 1f; SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex); }
 
     public void ObjetoPaso()
     {
@@ -308,6 +472,8 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         if (objectsPassed >= 3)
         {
             gameOver = true;
+            if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
+            if (settingsButtonRoot != null) settingsButtonRoot.SetActive(false);
             if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(false);
             if (gameOverRoot != null) gameOverRoot.SetActive(true);
             if (gameOverText != null) gameOverText.gameObject.SetActive(true);
