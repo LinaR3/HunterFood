@@ -5,6 +5,8 @@ using UnityEngine.UI;
 
 public class GameOverManagerScriptFarm : MonoBehaviour
 {
+    public static GameOverManagerScriptFarm Instance { get; private set; }
+
     [Header("Game Over")]
     public TMP_Text gameOverText;
     public GameObject restartButton;
@@ -31,6 +33,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private bool settingsFromStartScreen;
     private int selectedLevel = 1;
     private int selectedDifficulty = 1;
+    private int applesFedThisLevel;
     private bool ambienceEnabled = true;
     private float volume = 1f;
     private float normalAnimalSpeed;
@@ -48,6 +51,11 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private TMP_Text[] settingsValues;
     private TMP_Text levelHud;
     private TMP_Text foodHud;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     private void Start()
     {
@@ -543,11 +551,14 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     private void UpdateHud()
     {
         if (levelHud != null) levelHud.text = "NIVEL " + selectedLevel;
-        if (foodHud != null)
-        {
-            int apples = spawnManager != null ? spawnManager.applesToSatisfyAnimal : 3;
-            foodHud.text = "COMIDA " + apples.ToString("00");
-        }
+        if (foodHud != null) foodHud.text = "COMIDA " + applesFedThisLevel.ToString("00") + "/20";
+    }
+
+    public void RegisterAppleFed(Vector3 worldPosition)
+    {
+        applesFedThisLevel++;
+        UpdateHud();
+        HunterFoodVFX.FoodCollected(worldPosition, foodHud);
     }
 
     private void UpdateSettingsLabels()

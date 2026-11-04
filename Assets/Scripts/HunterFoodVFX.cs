@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>Small low-poly style visual feedback used by Hunter Food gameplay.</summary>
 public static class HunterFoodVFX
@@ -15,6 +16,43 @@ public static class HunterFoodVFX
     {
         ShowHeart(position + Vector3.up * 1.4f);
         Burst(position + Vector3.up * 0.6f, new Color(1f, 0.9f, 0.24f, 1f), 14, 0.16f, 1.8f, 0.72f);
+    }
+
+    public static void FoodCollected(Vector3 worldPosition, TMP_Text counter)
+    {
+        if (counter == null) return;
+
+        Canvas canvas = counter.GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+        RectTransform canvasRect = canvas.rootCanvas.transform as RectTransform;
+        if (canvasRect == null) return;
+
+        Camera uiCamera = canvas.rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay
+            ? null
+            : canvas.rootCanvas.worldCamera;
+        Camera mainCamera = Camera.main;
+        Vector2 sourceScreen = mainCamera != null
+            ? mainCamera.WorldToScreenPoint(worldPosition)
+            : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+        Vector2 targetScreen = RectTransformUtility.WorldToScreenPoint(uiCamera, counter.rectTransform.position);
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, sourceScreen, uiCamera, out Vector2 sourceLocal) ||
+            !RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, targetScreen, uiCamera, out Vector2 targetLocal))
+            return;
+
+        for (int i = 0; i < 3; i++)
+        {
+            GameObject particle = new GameObject("Food Counter Spark", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(FoodHudParticle));
+            particle.transform.SetParent(canvasRect, false);
+            RectTransform rect = particle.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(13f, 13f);
+            rect.anchoredPosition = sourceLocal + Random.insideUnitCircle * 24f;
+            rect.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            particle.GetComponent<Image>().color = new Color(1f, 0.78f, 0.02f, 1f);
+            particle.GetComponent<Image>().raycastTarget = false;
+            particle.GetComponent<FoodHudParticle>().Initialize(targetLocal, Random.Range(0.48f, 0.72f));
+        }
     }
 
     public static void Burst(Vector3 position, Color color, int count, float size, float speed, float lifetime)
@@ -91,5 +129,32 @@ public static class HunterFoodVFX
         if (shader == null) shader = Shader.Find("Sprites/Default");
         particleMaterial = new Material(shader) { name = "Hunter Food VFX Material" };
         return particleMaterial;
+    }
+}
+
+public sealed class FoodHudParticle : MonoBehaviour
+{
+    private RectTransform rect;
+    private Vector2 start;
+    private Vector2 destination;
+    private float duration;
+    private float elapsed;
+
+    public void Initialize(Vector2 target, float travelDuration)
+    {
+        rect = GetComponent<RectTransform>();
+        start = rect.anchoredPosition;
+        destination = target;
+        duration = Mathf.Max(0.1f, travelDuration);
+    }
+
+    private void Update()
+    {
+        elapsed += Time.unscaledDeltaTime;
+        float t = Mathf.Clamp01(elapsed / duration);
+        float eased = t * t * (3f - 2f * t);
+        rect.anchoredPosition = Vector2.LerpUnclamped(start, destination, eased);
+        rect.localScale = Vector3.one * (1f - t * 0.65f);
+        if (t >= 1f) Destroy(gameObject);
     }
 }
