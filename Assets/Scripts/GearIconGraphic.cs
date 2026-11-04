@@ -6,12 +6,14 @@ public sealed class GearIconGraphic : MaskableGraphic
 {
     private const int Segments = 32;
 
+    [Min(0.15f)] public float innerRadiusRatio = 0.43f;
+
     protected override void OnPopulateMesh(VertexHelper vh)
     {
         vh.Clear();
         Rect rect = GetPixelAdjustedRect();
         float radius = Mathf.Min(rect.width, rect.height) * 0.5f;
-        float innerRadius = radius * 0.43f;
+        float innerRadius = radius * innerRadiusRatio;
         float[] toothProfile = { 0.82f, 0.82f, 1f, 1f };
 
         for (int i = 0; i < Segments; i++)

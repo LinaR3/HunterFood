@@ -11,7 +11,7 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     public Image imagenGameOver;
     public GameObject gameOverRoot;
 
-    [Header("Welcome menu (Canvas objects assigned in the Inspector)")]
+    [Header("Inicio")]
     public GameObject welcomeMenuRoot;
     public TMP_Text welcomeTitle;
     public TMP_Text welcomeBody;
@@ -19,28 +19,35 @@ public class GameOverManagerScriptFarm : MonoBehaviour
     public TMP_Text[] welcomeButtonLabels = new TMP_Text[7];
     public SpawnManager spawnManager;
 
-    private readonly string[] mainLabels = { "Jugar", "Dificultad", "Cómo jugar", "Objetivo", "Opciones", "Créditos", "Salir" };
+    private static readonly Color Gold = new Color(1f, 0.78f, 0.02f, 1f);
+    private static readonly Color Panel = new Color(0.035f, 0.045f, 0.055f, 0.96f);
+    private static readonly Color Row = new Color(0.085f, 0.095f, 0.105f, 0.98f);
+
     private int objectsPassed;
     private bool gameOver;
-    private float normalAnimalSpeed, normalSpawnInterval, normalFoxSpeed, normalFoxInterval;
-    private int normalApples;
-    private float volume = 1f;
-    private string initialTitle;
-    private string initialBody;
-    private string[] initialButtonLabels;
-    private TMP_Text gameOverSubtitle;
-    private TMP_FontAsset menuFont;
-    private GameObject pauseRoot;
-    private GameObject settingsRoot;
-    private bool isPaused;
     private bool started;
+    private bool isPaused;
+    private bool settingsPausedGame;
+    private bool settingsFromStartScreen;
     private int selectedLevel = 1;
     private int selectedDifficulty = 1;
     private bool ambienceEnabled = true;
-    private bool settingsPausedGame;
+    private float volume = 1f;
+    private float normalAnimalSpeed;
+    private float normalSpawnInterval;
+    private float normalFoxSpeed;
+    private float normalFoxInterval;
+    private int normalApples;
     private float normalAmbientIntensity = 1f;
+    private TMP_FontAsset uiFont;
+    private GameObject pauseRoot;
+    private GameObject settingsRoot;
+    private GameObject gameplayHud;
     private GameObject pauseButtonRoot;
     private GameObject settingsButtonRoot;
+    private TMP_Text[] settingsValues;
+    private TMP_Text levelHud;
+    private TMP_Text foodHud;
 
     private void Start()
     {
@@ -50,7 +57,15 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         if (restartButton != null) restartButton.SetActive(false);
         if (imagenGameOver != null) imagenGameOver.gameObject.SetActive(false);
         if (spawnManager == null) spawnManager = FindFirstObjectByType<SpawnManager>();
-        ConfigureMenuPresentation();
+        CaptureGameplayDefaults();
+        LoadPreferences();
+        ConfigureStartScreen();
+        CreateRuntimeUI();
+        ShowStartScreen();
+    }
+
+    private void CaptureGameplayDefaults()
+    {
         if (spawnManager != null)
         {
             normalAnimalSpeed = spawnManager.animalSpeed;
@@ -60,6 +75,10 @@ public class GameOverManagerScriptFarm : MonoBehaviour
             normalApples = spawnManager.applesToSatisfyAnimal;
         }
         normalAmbientIntensity = RenderSettings.ambientIntensity;
+    }
+
+    private void LoadPreferences()
+    {
         volume = PlayerPrefs.GetFloat("HunterFood.Volume", 1f);
         selectedLevel = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Level", 1), 1, 5);
         selectedDifficulty = Mathf.Clamp(PlayerPrefs.GetInt("HunterFood.Difficulty", 1), 0, 2);
@@ -67,256 +86,343 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         AudioListener.volume = volume;
         RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f;
         ApplySelectedSettings();
+    }
+
+    private void ConfigureStartScreen()
+    {
+        uiFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Anton SDF");
+        if (uiFont == null && welcomeTitle != null) uiFont = welcomeTitle.font;
+
+        RectTransform rootRect = welcomeMenuRoot != null ? welcomeMenuRoot.GetComponent<RectTransform>() : null;
+        if (rootRect != null) Stretch(rootRect);
+        Image rootImage = welcomeMenuRoot != null ? welcomeMenuRoot.GetComponent<Image>() : null;
+        if (rootImage != null)
+        {
+            rootImage.color = new Color(0f, 0f, 0f, 0f);
+            rootImage.raycastTarget = false;
+        }
+
+        Transform oldCard = welcomeMenuRoot != null ? welcomeMenuRoot.transform.Find("Welcome Menu Card") : null;
+        if (oldCard != null) oldCard.gameObject.SetActive(false);
+
+        if (welcomeTitle != null)
+        {
+            welcomeTitle.gameObject.SetActive(true);
+            welcomeTitle.text = "HUNTERFOOD";
+            SetRect(welcomeTitle.rectTransform, new Vector2(0f, 270f), new Vector2(1900f, 240f));
+            StyleText(welcomeTitle, 190f, Gold, TextAlignmentOptions.Center, true);
+        }
+
+        if (welcomeBody != null)
+        {
+            welcomeBody.text = string.Empty;
+            welcomeBody.gameObject.SetActive(false);
+        }
+
         for (int i = 0; i < welcomeButtons.Length; i++)
         {
-            int index = i;
-            if (welcomeButtons[i] != null) welcomeButtons[i].onClick.AddListener(() => OnMenuButton(index));
+            Button button = welcomeButtons[i];
+            if (button == null) continue;
+            bool isPlay = i == 0;
+            button.gameObject.SetActive(isPlay);
+            button.onClick.RemoveAllListeners();
+            if (!isPlay) continue;
+
+            Image image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.sprite = null;
+                image.color = Panel;
+                image.raycastTarget = true;
+            }
+            SetRect(button.GetComponent<RectTransform>(), new Vector2(0f, -155f), new Vector2(700f, 120f));
+            AddAngularFrame(button.transform, 5f, 0.16f);
+            button.onClick.AddListener(StartGame);
+            button.navigation = new Navigation { mode = Navigation.Mode.Automatic };
+
+            TMP_Text label = i < welcomeButtonLabels.Length ? welcomeButtonLabels[i] : button.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+            {
+                label.text = "JUGAR";
+                label.gameObject.SetActive(true);
+                Stretch(label.rectTransform);
+                StyleText(label, 58f, Gold, TextAlignmentOptions.Center, true);
+            }
         }
-        initialTitle = welcomeTitle != null ? welcomeTitle.text : "HunterFood";
-        initialBody = welcomeBody != null ? welcomeBody.text : "Alimenta a los animales, protege tus manzanas y ten cuidado con el zorro.";
-        initialButtonLabels = new string[welcomeButtonLabels.Length];
-        for (int i = 0; i < welcomeButtonLabels.Length; i++)
-            initialButtonLabels[i] = welcomeButtonLabels[i] != null ? welcomeButtonLabels[i].text : mainLabels[Mathf.Min(i, mainLabels.Length - 1)];
-        if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(true);
-        CreateGameplayControls();
-        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
-        ShowMainMenu();
     }
 
-    private void ConfigureMenuPresentation()
+    private void CreateRuntimeUI()
     {
-        if (welcomeTitle != null) menuFont = welcomeTitle.font;
-        if (welcomeMenuRoot != null)
-        {
-            RectTransform menuRect = welcomeMenuRoot.GetComponent<RectTransform>();
-            if (menuRect != null)
-            {
-                menuRect.anchorMin = Vector2.zero;
-                menuRect.anchorMax = Vector2.one;
-                menuRect.anchoredPosition = Vector2.zero;
-                menuRect.sizeDelta = Vector2.zero;
-            }
+        Transform canvas = welcomeMenuRoot != null ? welcomeMenuRoot.transform.parent : null;
+        if (canvas == null) return;
 
-            Image backdrop = welcomeMenuRoot.GetComponent<Image>();
-            if (backdrop != null)
-            {
-                backdrop.color = new Color(0.025f, 0.055f, 0.04f, 0.68f);
-                backdrop.raycastTarget = true;
-            }
+        gameplayHud = CreateHud(canvas);
+        pauseRoot = CreatePausePanel(canvas);
+        settingsRoot = CreateSettingsPanel(canvas);
+        pauseButtonRoot = BuildTopControl(canvas, "Pausa", new Vector2(-130f, -42f), false, TogglePause).gameObject;
+        settingsButtonRoot = BuildTopControl(canvas, "Ajustes", new Vector2(-42f, -42f), true, OpenSettings).gameObject;
 
-            CreateCard(welcomeMenuRoot.transform, "Welcome Menu Card", new Vector2(1000f, 620f));
-            SetRect(welcomeTitle != null ? welcomeTitle.rectTransform : null, new Vector2(0f, 170f), new Vector2(820f, 150f));
-            if (welcomeTitle != null) StyleText(welcomeTitle, 112f, 64f, 120f, new Color(1f, 0.78f, 0.04f));
-            SetRect(welcomeBody != null ? welcomeBody.rectTransform : null, new Vector2(0f, 65f), new Vector2(720f, 100f));
-            if (welcomeBody != null) StyleText(welcomeBody, 30f, 22f, 34f, new Color(1f, 0.94f, 0.78f));
-
-            for (int i = 0; i < welcomeButtons.Length; i++)
-            {
-                Button button = welcomeButtons[i];
-                if (button == null) continue;
-                RectTransform buttonRect = button.GetComponent<RectTransform>();
-                SetRect(buttonRect, new Vector2(0f, -100f), new Vector2(560f, 92f));
-                buttonRect.localScale = Vector3.one;
-                Image buttonImage = button.GetComponent<Image>();
-                if (buttonImage != null) buttonImage.color = new Color(0.92f, 0.59f, 0.06f, 1f);
-                button.navigation = new Navigation { mode = Navigation.Mode.Automatic };
-                if (i < welcomeButtonLabels.Length && welcomeButtonLabels[i] != null)
-                    StyleText(welcomeButtonLabels[i], 42f, 28f, 46f, new Color(0.12f, 0.10f, 0.07f));
-            }
-        }
-
-        if (gameOverRoot != null)
-        {
-            CanvasScaler scaler = gameOverRoot.GetComponent<CanvasScaler>();
-            if (scaler != null) scaler.matchWidthOrHeight = 0.5f;
-            Image backdrop = imagenGameOver != null ? imagenGameOver : gameOverRoot.GetComponentInChildren<Image>(true);
-            if (backdrop != null)
-            {
-                backdrop.color = new Color(0.025f, 0.055f, 0.04f, 0.72f);
-                backdrop.raycastTarget = true;
-                backdrop.rectTransform.anchorMin = Vector2.zero;
-                backdrop.rectTransform.anchorMax = Vector2.one;
-                backdrop.rectTransform.anchoredPosition = Vector2.zero;
-                backdrop.rectTransform.sizeDelta = Vector2.zero;
-            }
-
-            CreateCard(gameOverRoot.transform, "Game Over Card", new Vector2(780f, 460f));
-            SetRect(gameOverText != null ? gameOverText.rectTransform : null, new Vector2(0f, 116f), new Vector2(690f, 110f));
-            if (gameOverText != null) StyleText(gameOverText, 76f, 58f, 82f, new Color(1f, 0.67f, 0.24f));
-
-            if (gameOverSubtitle == null)
-            {
-                GameObject subtitleObject = new GameObject("Game Over Message", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-                subtitleObject.transform.SetParent(gameOverRoot.transform, false);
-                gameOverSubtitle = subtitleObject.GetComponent<TextMeshProUGUI>();
-                gameOverSubtitle.text = "Tres animales escaparon";
-                if (gameOverText != null) gameOverSubtitle.font = gameOverText.font;
-            }
-            SetRect(gameOverSubtitle.rectTransform, new Vector2(0f, 20f), new Vector2(660f, 64f));
-            StyleText(gameOverSubtitle, 32f, 24f, 36f, new Color(1f, 0.94f, 0.78f));
-
-            if (restartButton != null)
-            {
-                RectTransform restartRect = restartButton.GetComponent<RectTransform>();
-                SetRect(restartRect, new Vector2(0f, -96f), new Vector2(500f, 70f));
-                restartRect.localScale = Vector3.one;
-                Image restartImage = restartButton.GetComponent<Image>();
-                if (restartImage != null) restartImage.color = new Color(0.19f, 0.39f, 0.24f, 1f);
-                TMP_Text restartLabel = restartButton.GetComponentInChildren<TMP_Text>(true);
-                if (restartLabel != null)
-                {
-                    restartLabel.text = "Jugar de nuevo";
-                    StyleText(restartLabel, 31f, 24f, 34f, new Color(1f, 0.96f, 0.86f));
-                }
-            }
-        }
-
-        CanvasScaler menuScaler = welcomeMenuRoot != null ? welcomeMenuRoot.GetComponentInParent<CanvasScaler>() : null;
-        if (menuScaler != null) menuScaler.matchWidthOrHeight = 0.5f;
+        gameplayHud.SetActive(false);
+        pauseRoot.SetActive(false);
+        settingsRoot.SetActive(false);
+        pauseButtonRoot.SetActive(false);
     }
 
-    private void CreateCard(Transform parent, string cardName, Vector2 size)
+    private GameObject CreateHud(Transform parent)
     {
-        Transform existing = parent.Find(cardName);
-        GameObject card = existing != null ? existing.gameObject : new GameObject(cardName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        if (existing == null)
+        GameObject hud = new GameObject("Gameplay HUD", typeof(RectTransform));
+        hud.transform.SetParent(parent, false);
+        Stretch(hud.GetComponent<RectTransform>());
+
+        levelHud = CreateHudTag(hud.transform, "Level HUD", "NIVEL 1", new Vector2(46f, -42f), new Vector2(225f, 64f));
+        foodHud = CreateHudTag(hud.transform, "Food HUD", "COMIDA 03", new Vector2(285f, -42f), new Vector2(280f, 64f));
+        return hud;
+    }
+
+    private TMP_Text CreateHudTag(Transform parent, string name, string label, Vector2 position, Vector2 size)
+    {
+        GameObject tag = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        tag.transform.SetParent(parent, false);
+        Image image = tag.GetComponent<Image>();
+        image.sprite = null;
+        image.color = Panel;
+        SetTopLeftRect(tag.GetComponent<RectTransform>(), position, size);
+        AddAngularFrame(tag.transform, 3f, 0.18f);
+        TMP_Text text = CreateText(tag.transform, label, Vector2.zero, size - new Vector2(18f, 8f), 30f, Gold, TextAlignmentOptions.Center);
+        return text;
+    }
+
+    private GameObject CreatePausePanel(Transform parent)
+    {
+        GameObject root = CreateOverlay(parent, "Pause Overlay");
+        RectTransform card = CreatePanelCard(root.transform, "Pause Panel", new Vector2(780f, 560f));
+        CreateText(card, "PAUSA", new Vector2(0f, 210f), new Vector2(680f, 100f), 72f, Gold, TextAlignmentOptions.Center, true);
+        BuildModalButton(card, "CONTINUAR", new Vector2(0f, 80f), new Vector2(560f, 74f), ResumeGame);
+        BuildModalButton(card, "REINICIAR", new Vector2(0f, -20f), new Vector2(560f, 74f), Reiniciar);
+        BuildModalButton(card, "SALIR AL INICIO", new Vector2(0f, -120f), new Vector2(560f, 74f), ReturnToMenu);
+        return root;
+    }
+
+    private GameObject CreateSettingsPanel(Transform parent)
+    {
+        GameObject root = CreateOverlay(parent, "Settings Overlay");
+        RectTransform card = CreatePanelCard(root.transform, "Settings Panel", new Vector2(900f, 700f));
+        CreateText(card, "AJUSTES", new Vector2(0f, 270f), new Vector2(700f, 96f), 68f, Gold, TextAlignmentOptions.Center, true);
+
+        Button close = BuildModalButton(card, "X", new Vector2(365f, 270f), new Vector2(58f, 58f), CloseSettings, true);
+        if (close.GetComponentInChildren<TMP_Text>() != null) close.GetComponentInChildren<TMP_Text>().fontSize = 38f;
+
+        string[] labels = { "NIVEL", "SONIDO", "AMBIENTACIÓN", "DIFICULTAD" };
+        float[] rowY = { 145f, 40f, -65f, -170f };
+        settingsValues = new TMP_Text[labels.Length];
+        for (int i = 0; i < labels.Length; i++)
         {
-            card.transform.SetParent(parent, false);
-            RectTransform rect = card.GetComponent<RectTransform>();
-            SetRect(rect, Vector2.zero, size);
-            rect.localScale = Vector3.one;
-            Image image = card.GetComponent<Image>();
-            image.color = new Color(0.07f, 0.19f, 0.13f, 0.98f);
-            image.raycastTarget = false;
+            int row = i;
+            Button option = CreateSettingsRow(card, labels[i], rowY[i], () => ActivateSetting(row));
+            Transform valueLabel = option.transform.Find("Setting Value");
+            settingsValues[i] = valueLabel != null ? valueLabel.GetComponent<TMP_Text>() : null;
         }
-        // Keep the modal above the dim overlay and below all existing controls.
-        card.transform.SetSiblingIndex(cardName == "Welcome Menu Card" ? 0 : 1);
+
+        BuildModalButton(card, "GUARDAR", new Vector2(0f, -280f), new Vector2(330f, 76f), CloseSettings, false, true);
+        UpdateSettingsLabels();
+        return root;
+    }
+
+    private Button CreateSettingsRow(Transform parent, string label, float y, UnityEngine.Events.UnityAction action)
+    {
+        GameObject row = new GameObject(label + " Row", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        row.transform.SetParent(parent, false);
+        SetRect(row.GetComponent<RectTransform>(), new Vector2(0f, y), new Vector2(730f, 76f));
+        row.GetComponent<Image>().color = Row;
+        Button button = row.GetComponent<Button>();
+        button.transition = Selectable.Transition.ColorTint;
+        button.onClick.AddListener(action);
+        AddAngularFrame(row.transform, 2.5f, 0.12f);
+
+        CreateText(row.transform, label, new Vector2(-170f, 0f), new Vector2(350f, 64f), 30f, Color.white, TextAlignmentOptions.Left);
+        TMP_Text value = CreateText(row.transform, "", new Vector2(230f, 0f), new Vector2(170f, 64f), 30f, Gold, TextAlignmentOptions.Center);
+        value.gameObject.name = "Setting Value";
+        return button;
+    }
+
+    private void ActivateSetting(int index)
+    {
+        switch (index)
+        {
+            case 0: CycleLevel(); break;
+            case 1: ToggleSound(); break;
+            case 2: ToggleAmbience(); break;
+            case 3: CycleDifficulty(); break;
+        }
+        UpdateSettingsLabels();
+    }
+
+    private GameObject CreateOverlay(Transform parent, string name)
+    {
+        GameObject root = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        root.transform.SetParent(parent, false);
+        Stretch(root.GetComponent<RectTransform>());
+        Image overlay = root.GetComponent<Image>();
+        overlay.color = new Color(0.015f, 0.02f, 0.03f, 0.62f);
+        overlay.raycastTarget = true;
+        return root;
+    }
+
+    private RectTransform CreatePanelCard(Transform parent, string name, Vector2 size)
+    {
+        GameObject card = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        card.transform.SetParent(parent, false);
+        SetRect(card.GetComponent<RectTransform>(), Vector2.zero, size);
+        Image image = card.GetComponent<Image>();
+        image.sprite = null;
+        image.color = Panel;
+        image.raycastTarget = false;
+        AddAngularFrame(card.transform, 5f, 0.12f);
+        return card.GetComponent<RectTransform>();
+    }
+
+    private Button BuildTopControl(Transform parent, string name, Vector2 position, bool gear, UnityEngine.Events.UnityAction action)
+    {
+        GameObject control = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        control.transform.SetParent(parent, false);
+        SetTopRightRect(control.GetComponent<RectTransform>(), position, new Vector2(66f, 66f));
+        Image image = control.GetComponent<Image>();
+        image.sprite = null;
+        image.color = new Color(0.025f, 0.035f, 0.045f, 0.82f);
+        Button button = control.GetComponent<Button>();
+        button.onClick.AddListener(action);
+        AddAngularFrame(control.transform, 3f, 0.16f);
+
+        if (gear)
+        {
+            GameObject icon = new GameObject("Gear Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(GearIconGraphic));
+            icon.transform.SetParent(control.transform, false);
+            SetRect(icon.GetComponent<RectTransform>(), Vector2.zero, new Vector2(34f, 34f));
+            icon.GetComponent<GearIconGraphic>().color = Gold;
+            icon.GetComponent<GearIconGraphic>().raycastTarget = false;
+        }
+        else
+        {
+            CreatePauseBars(control.transform);
+        }
+        return button;
+    }
+
+    private void CreatePauseBars(Transform parent)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            GameObject bar = new GameObject("Pause Bar", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            bar.transform.SetParent(parent, false);
+            SetRect(bar.GetComponent<RectTransform>(), new Vector2(i == 0 ? -8f : 8f, 0f), new Vector2(8f, 30f));
+            bar.GetComponent<Image>().color = Gold;
+            bar.GetComponent<Image>().raycastTarget = false;
+        }
+    }
+
+    private Button BuildModalButton(Transform parent, string label, Vector2 position, Vector2 size, UnityEngine.Events.UnityAction action, bool compact = false, bool accentFill = false)
+    {
+        GameObject buttonObject = new GameObject(label + " Button", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
+        SetRect(buttonObject.GetComponent<RectTransform>(), position, size);
+        Image image = buttonObject.GetComponent<Image>();
+        image.sprite = null;
+        image.color = accentFill ? Gold : Row;
+        Button button = buttonObject.GetComponent<Button>();
+        button.onClick.AddListener(action);
+        AddAngularFrame(buttonObject.transform, compact ? 2.5f : 3f, 0.16f, accentFill ? Color.black : Gold);
+        CreateText(buttonObject.transform, label, Vector2.zero, size - new Vector2(20f, 12f), compact ? 32f : 34f, accentFill ? Color.black : Gold, TextAlignmentOptions.Center, true);
+        return button;
+    }
+
+    private void AddAngularFrame(Transform parent, float thickness, float cut, Color? frameColor = null)
+    {
+        GameObject frame = new GameObject("Yellow Angular Frame", typeof(RectTransform), typeof(CanvasRenderer), typeof(AngularFrameGraphic));
+        frame.transform.SetParent(parent, false);
+        Stretch(frame.GetComponent<RectTransform>());
+        AngularFrameGraphic graphic = frame.GetComponent<AngularFrameGraphic>();
+        graphic.thickness = thickness;
+        graphic.cornerCut = cut;
+        graphic.color = frameColor ?? Gold;
+        graphic.raycastTarget = false;
+    }
+
+    private TMP_Text CreateText(Transform parent, string value, Vector2 position, Vector2 size, float fontSize, Color color, TextAlignmentOptions alignment, bool outlined = false)
+    {
+        GameObject go = new GameObject("Text " + value, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(parent, false);
+        SetRect(go.GetComponent<RectTransform>(), position, size);
+        TMP_Text text = go.GetComponent<TMP_Text>();
+        text.text = value;
+        StyleText(text, fontSize, color, alignment, outlined);
+        text.raycastTarget = false;
+        return text;
+    }
+
+    private void StyleText(TMP_Text text, float size, Color color, TextAlignmentOptions alignment, bool outlined)
+    {
+        if (uiFont != null) text.font = uiFont;
+        text.fontSize = size;
+        text.fontSizeMin = Mathf.Max(18f, size * 0.68f);
+        text.fontSizeMax = size;
+        text.enableAutoSizing = true;
+        text.fontStyle = FontStyles.Bold;
+        text.color = color;
+        text.alignment = alignment;
+        text.characterSpacing = 2f;
+        text.margin = new Vector4(8f, 4f, 8f, 4f);
+        if (outlined && text.fontMaterial != null)
+        {
+            Material material = new Material(text.fontMaterial);
+            if (material.HasProperty("_OutlineWidth")) material.SetFloat("_OutlineWidth", 0.18f);
+            if (material.HasProperty("_OutlineColor")) material.SetColor("_OutlineColor", Color.black);
+            material.EnableKeyword("OUTLINE_ON");
+            text.fontMaterial = material;
+        }
     }
 
     private static void SetRect(RectTransform rect, Vector2 position, Vector2 size)
     {
         if (rect == null) return;
-        rect.anchorMin = new Vector2(0.5f, 0.5f);
-        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = position;
         rect.sizeDelta = size;
     }
 
-    private void StyleText(TMP_Text text, float size, float minSize, float maxSize, Color color)
+    private static void SetTopRightRect(RectTransform rect, Vector2 position, Vector2 size)
     {
-        if (text == null) return;
-        if (menuFont != null) text.font = menuFont;
-        text.fontSize = size;
-        text.fontSizeMin = minSize;
-        text.fontSizeMax = maxSize;
-        text.enableAutoSizing = true;
-        text.color = color;
-        text.alignment = TextAlignmentOptions.Center;
-        text.raycastTarget = false;
-        text.margin = new Vector4(8f, 4f, 8f, 4f);
+        rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
     }
 
-    private void OnMenuButton(int index)
+    private static void SetTopLeftRect(RectTransform rect, Vector2 position, Vector2 size)
     {
-        if (index >= 0 && index < 7) HandleMenuAction(index);
+        rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
     }
 
-    private void HandleMenuAction(int index)
+    private static void Stretch(RectTransform rect)
     {
-        switch (index)
-        {
-            case 0: StartGame(); break;
-            case 1: ShowPage("Dificultad", "Elige el ritmo de la partida.", new[] { "Fácil", "Normal", "Difícil", "Volver" }, 4); break;
-            case 2: ShowPage("Cómo jugar", "Mueve al granjero con WASD o las flechas. Lanza manzanas con la tecla configurada. Alimenta a los animales antes de que escapen y evita que el zorro intercepte tus manzanas.", new[] { "Volver" }, 1); break;
-            case 3: ShowPage("Objetivo", "Alimenta a los animales con manzanas para llenar su barra de hambre. Evita que escapen y que el zorro robe tus lanzamientos.", new[] { "Volver" }, 1); break;
-            case 4: ShowPage("Opciones", "Volumen: " + Mathf.RoundToInt(volume * 100f) + "%\nPantalla completa: " + (Screen.fullScreen ? "Sí" : "No"), new[] { "- Volumen", "+ Volumen", "Pantalla completa", "Volver" }, 4); break;
-            case 5: ShowPage("Créditos", "HunterFood\nCreado como proyecto del curso Unity Junior Programmer.", new[] { "Volver" }, 1); break;
-            case 6: Application.Quit(); break;
-            case 7: ApplyDifficulty(0.75f, 1.4f, -1, 0.85f, 1.4f); ShowMainMenu(); break;
-            case 8: ApplyDifficulty(1f, 1f, 0, 1f, 1f); ShowMainMenu(); break;
-            case 9: ApplyDifficulty(1.25f, 0.75f, 1, 1.15f, 0.7f); ShowMainMenu(); break;
-            case 10: ShowMainMenu(); break;
-            case 11: volume = Mathf.Clamp01(volume - 0.1f); AudioListener.volume = volume; UpdateOptionsText(); break;
-            case 12: volume = Mathf.Clamp01(volume + 0.1f); AudioListener.volume = volume; UpdateOptionsText(); break;
-            case 13: Screen.fullScreen = !Screen.fullScreen; UpdateOptionsText(); break;
-        }
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
     }
 
-    private void ShowMainMenu()
-    {
-        SetMenu("HUNTERFOOD", "Alimenta a los animales. ¡Cuidado con el zorro!", new[] { "JUGAR" }, 1, 0);
-    }
-
-    private void ShowPage(string title, string body, string[] labels, int count)
-    {
-        SetMenu(title, body, labels, count, 0);
-    }
-
-    private void SetMenu(string title, string body, string[] labels, int count, int actionOffset)
+    private void ShowStartScreen()
     {
         if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(true);
-        if (welcomeTitle != null) welcomeTitle.text = title;
-        if (welcomeBody != null) welcomeBody.text = body;
-        for (int i = 0; i < welcomeButtons.Length; i++)
-        {
-            bool active = i < count && i < labels.Length;
-            if (welcomeButtons[i] != null) welcomeButtons[i].gameObject.SetActive(active);
-            if (i < welcomeButtonLabels.Length && welcomeButtonLabels[i] != null && active)
-                welcomeButtonLabels[i].text = labels[i];
-            if (welcomeButtons[i] != null)
-            {
-                welcomeButtons[i].onClick.RemoveAllListeners();
-                int action = actionOffset + i;
-                welcomeButtons[i].onClick.AddListener(() => HandleMenuAction(action));
-            }
-        }
-        // Page-specific buttons map to actions rather than their visible row order.
-        if (title == "HUNTERFOOD")
-        {
-            BindActions(new[] { 0 }, count);
-        }
-        else if (title == "Dificultad")
-        {
-            BindActions(new[] { 7, 8, 9, 10 }, count);
-        }
-        else if (title == "Opciones")
-        {
-            BindActions(new[] { 11, 12, 13, 10 }, count);
-        }
-        else if (count == 1) BindActions(new[] { 10 }, count);
-        else BindActions(new[] { 0, 1, 2, 3, 4, 5, 6 }, count);
-    }
-
-    private void BindActions(int[] actions, int count)
-    {
-        for (int i = 0; i < welcomeButtons.Length; i++)
-        {
-            if (welcomeButtons[i] == null) continue;
-            welcomeButtons[i].onClick.RemoveAllListeners();
-            if (i < count && i < actions.Length)
-            {
-                int action = actions[i];
-                welcomeButtons[i].onClick.AddListener(() => HandleMenuAction(action));
-            }
-        }
-    }
-
-    private void UpdateOptionsText()
-    {
-        if (welcomeBody != null)
-            welcomeBody.text = "Volumen: " + Mathf.RoundToInt(volume * 100f) + "%\nPantalla completa: " + (Screen.fullScreen ? "Si" : "No");
-    }
-
-    private void ApplyDifficulty(float speed, float interval, int applesDelta, float foxSpeed, float foxInterval)
-    {
-        if (spawnManager == null) return;
-        spawnManager.animalSpeed = normalAnimalSpeed * speed;
-        spawnManager.spawnInterval = normalSpawnInterval * interval;
-        spawnManager.applesToSatisfyAnimal = Mathf.Max(1, normalApples + applesDelta);
-        spawnManager.foxSpeed = normalFoxSpeed * foxSpeed;
-        spawnManager.foxSpawnInterval = normalFoxInterval * foxInterval;
-        spawnManager.UpdateSpawnSchedule();
+        if (gameplayHud != null) gameplayHud.SetActive(false);
+        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
+        if (settingsButtonRoot != null) settingsButtonRoot.SetActive(true);
+        if (pauseRoot != null) pauseRoot.SetActive(false);
+        if (settingsRoot != null) settingsRoot.SetActive(false);
+        Time.timeScale = 0f;
     }
 
     private void StartGame()
@@ -324,124 +430,89 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         started = true;
         isPaused = false;
         if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(false);
-        if (gameOverRoot != null) gameOverRoot.SetActive(false);
+        if (gameplayHud != null) gameplayHud.SetActive(true);
+        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(true);
+        if (settingsButtonRoot != null) settingsButtonRoot.SetActive(true);
         if (pauseRoot != null) pauseRoot.SetActive(false);
         if (settingsRoot != null) settingsRoot.SetActive(false);
-        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(true);
+        UpdateHud();
         Time.timeScale = 1f;
     }
 
     private void Update()
     {
-        if (started && !gameOver && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P)))
-            TogglePause();
-    }
-
-    private void CreateGameplayControls()
-    {
-        Transform canvas = welcomeMenuRoot != null ? welcomeMenuRoot.transform.parent : null;
-        if (canvas == null) return;
-        pauseRoot = BuildPanel(canvas, "Pause Panel", "PAUSA", new[] { "CONTINUAR", "REINICIAR", "SALIR AL INICIO" }, new System.Action[] { ResumeGame, Reiniciar, ReturnToMenu }, new Vector2(760f, 560f));
-        settingsRoot = BuildPanel(canvas, "Settings Panel", "AJUSTES", new[] { "NIVEL: 1", "SONIDO: SÍ", "AMBIENTACIÓN: SÍ", "DIFICULTAD: NORMAL", "CERRAR" }, new System.Action[] { CycleLevel, ToggleSound, ToggleAmbience, CycleDifficulty, CloseSettings }, new Vector2(820f, 680f));
-        pauseRoot.SetActive(false);
-        settingsRoot.SetActive(false);
-        pauseButtonRoot = BuildButton(canvas, "Pausa", "II", new Vector2(-82f, -76f), TogglePause).gameObject;
-        settingsButtonRoot = BuildButton(canvas, "Ajustes", "", new Vector2(-82f, -164f), OpenSettings).gameObject;
-    }
-
-    private GameObject BuildPanel(Transform parent, string name, string title, string[] labels, System.Action[] actions, Vector2 size)
-    {
-        GameObject root = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        root.transform.SetParent(parent, false);
-        RectTransform full = root.GetComponent<RectTransform>();
-        full.anchorMin = Vector2.zero; full.anchorMax = Vector2.one; full.offsetMin = Vector2.zero; full.offsetMax = Vector2.zero;
-        root.GetComponent<Image>().color = new Color(0.015f, 0.025f, 0.025f, 0.68f);
-        GameObject card = new GameObject(name + " Card", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        card.transform.SetParent(root.transform, false);
-        SetRect(card.GetComponent<RectTransform>(), Vector2.zero, size);
-        card.GetComponent<Image>().color = new Color(0.055f, 0.085f, 0.075f, 0.98f);
-        MakeText(card.transform, title, new Vector2(0f, size.y * 0.36f), new Vector2(size.x - 80f, 90f), 60f, new Color(1f, 0.78f, 0.04f));
-        float rowGap = 82f;
-        float startY = (labels.Length - 1) * rowGap * 0.5f - 20f;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            int index = i;
-            BuildButton(card.transform, name + " " + i, labels[i], new Vector2(0f, startY - i * rowGap), () => actions[index]());
-        }
-        return root;
-    }
-
-    private Button BuildButton(Transform parent, string name, string label, Vector2 position, System.Action action)
-    {
-        GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-        buttonObject.transform.SetParent(parent, false);
-        bool compact = parent == (welcomeMenuRoot != null ? welcomeMenuRoot.transform.parent : null);
-        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
-        if (compact)
-        {
-            buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(1f, 1f);
-            buttonRect.pivot = new Vector2(1f, 1f);
-            buttonRect.anchoredPosition = position;
-            buttonRect.sizeDelta = new Vector2(70f, 70f);
-        }
-        else SetRect(buttonRect, position, new Vector2(530f, 68f));
-        Image image = buttonObject.GetComponent<Image>();
-        image.color = compact ? new Color(0.04f, 0.07f, 0.06f, 0.9f) : new Color(0.19f, 0.39f, 0.24f, 1f);
-        Button button = buttonObject.GetComponent<Button>();
-        button.onClick.AddListener(() => action());
-        if (compact && name == "Ajustes")
-        {
-            GameObject icon = new GameObject("Settings Gear", typeof(RectTransform), typeof(CanvasRenderer), typeof(GearIconGraphic));
-            icon.transform.SetParent(buttonObject.transform, false);
-            SetRect(icon.GetComponent<RectTransform>(), Vector2.zero, new Vector2(38f, 38f));
-            icon.GetComponent<GearIconGraphic>().color = new Color(1f, 0.78f, 0.18f, 1f);
-        }
-        else
-        {
-            MakeText(buttonObject.transform, label, Vector2.zero, compact ? new Vector2(68f, 68f) : new Vector2(500f, 60f), compact ? 34f : 30f, new Color(1f, 0.9f, 0.55f));
-        }
-        return button;
-    }
-
-    private void MakeText(Transform parent, string value, Vector2 position, Vector2 size, float fontSize, Color color)
-    {
-        GameObject go = new GameObject(value + " Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-        go.transform.SetParent(parent, false);
-        TMP_Text text = go.GetComponent<TMP_Text>();
-        text.text = value; text.font = menuFont; text.fontSize = fontSize; text.color = color;
-        text.alignment = TextAlignmentOptions.Center; text.enableAutoSizing = true; text.fontSizeMin = 18f; text.fontSizeMax = fontSize;
-        text.raycastTarget = false;
-        SetRect(text.rectTransform, position, size);
+        if (started && !gameOver && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))) TogglePause();
     }
 
     private void TogglePause()
     {
-        if (isPaused) ResumeGame();
-        else
+        if (isPaused) { ResumeGame(); return; }
+        isPaused = true;
+        Time.timeScale = 0f;
+        if (pauseRoot != null)
         {
-            isPaused = true;
-            Time.timeScale = 0f;
-            if (pauseRoot != null) { pauseRoot.SetActive(true); pauseRoot.transform.SetAsLastSibling(); }
+            pauseRoot.SetActive(true);
+            pauseRoot.transform.SetAsLastSibling();
         }
     }
 
-    private void ResumeGame() { isPaused = false; if (pauseRoot != null) pauseRoot.SetActive(false); Time.timeScale = 1f; }
+    private void ResumeGame()
+    {
+        isPaused = false;
+        if (pauseRoot != null) pauseRoot.SetActive(false);
+        Time.timeScale = 1f;
+    }
+
     private void OpenSettings()
     {
-        settingsPausedGame = Time.timeScale > 0f;
+        settingsPausedGame = started && Time.timeScale > 0f;
+        settingsFromStartScreen = !started && welcomeMenuRoot != null && welcomeMenuRoot.activeSelf;
+        if (settingsFromStartScreen) welcomeMenuRoot.SetActive(false);
         Time.timeScale = 0f;
         UpdateSettingsLabels();
-        if (settingsRoot != null) { settingsRoot.SetActive(true); settingsRoot.transform.SetAsLastSibling(); }
+        if (settingsRoot != null)
+        {
+            settingsRoot.SetActive(true);
+            settingsRoot.transform.SetAsLastSibling();
+        }
     }
+
     private void CloseSettings()
     {
+        PlayerPrefs.Save();
         if (settingsRoot != null) settingsRoot.SetActive(false);
-        if (!isPaused && settingsPausedGame) Time.timeScale = 1f;
+        if (settingsFromStartScreen && welcomeMenuRoot != null) welcomeMenuRoot.SetActive(true);
+        if (started && !isPaused && settingsPausedGame) Time.timeScale = 1f;
     }
-    private void ToggleSound() { volume = volume > 0f ? 0f : 1f; AudioListener.volume = volume; PlayerPrefs.SetFloat("HunterFood.Volume", volume); UpdateSettingsLabels(); }
-    private void ToggleAmbience() { ambienceEnabled = !ambienceEnabled; RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f; PlayerPrefs.SetInt("HunterFood.Ambience", ambienceEnabled ? 1 : 0); UpdateSettingsLabels(); }
-    private void CycleLevel() { selectedLevel = selectedLevel % 5 + 1; PlayerPrefs.SetInt("HunterFood.Level", selectedLevel); ApplySelectedSettings(); UpdateSettingsLabels(); }
-    private void CycleDifficulty() { selectedDifficulty = (selectedDifficulty + 1) % 3; PlayerPrefs.SetInt("HunterFood.Difficulty", selectedDifficulty); ApplySelectedSettings(); UpdateSettingsLabels(); }
+
+    private void CycleLevel()
+    {
+        selectedLevel = selectedLevel % 5 + 1;
+        PlayerPrefs.SetInt("HunterFood.Level", selectedLevel);
+        ApplySelectedSettings();
+    }
+
+    private void ToggleSound()
+    {
+        volume = volume > 0f ? 0f : 1f;
+        AudioListener.volume = volume;
+        PlayerPrefs.SetFloat("HunterFood.Volume", volume);
+    }
+
+    private void ToggleAmbience()
+    {
+        ambienceEnabled = !ambienceEnabled;
+        RenderSettings.ambientIntensity = ambienceEnabled ? normalAmbientIntensity : 0f;
+        PlayerPrefs.SetInt("HunterFood.Ambience", ambienceEnabled ? 1 : 0);
+    }
+
+    private void CycleDifficulty()
+    {
+        selectedDifficulty = (selectedDifficulty + 1) % 3;
+        PlayerPrefs.SetInt("HunterFood.Difficulty", selectedDifficulty);
+        ApplySelectedSettings();
+    }
+
     private void ApplySelectedSettings()
     {
         if (spawnManager == null) return;
@@ -454,32 +525,87 @@ public class GameOverManagerScriptFarm : MonoBehaviour
         spawnManager.foxSpawnInterval = normalFoxInterval * intervals[selectedDifficulty] / levelFactor;
         spawnManager.applesToSatisfyAnimal = Mathf.Max(1, normalApples + selectedDifficulty - 1 + (selectedLevel - 1) / 2);
         spawnManager.UpdateSpawnSchedule();
+        UpdateHud();
     }
+
+    private void UpdateHud()
+    {
+        if (levelHud != null) levelHud.text = "NIVEL " + selectedLevel;
+        if (foodHud != null)
+        {
+            int apples = spawnManager != null ? spawnManager.applesToSatisfyAnimal : 3;
+            foodHud.text = "COMIDA " + apples.ToString("00");
+        }
+    }
+
     private void UpdateSettingsLabels()
     {
-        if (settingsRoot == null) return;
-        TMP_Text[] texts = settingsRoot.GetComponentsInChildren<TMP_Text>(true);
-        string[] values = { "NIVEL: " + selectedLevel, "SONIDO: " + (volume > 0f ? "SÍ" : "NO"), "AMBIENTACIÓN: " + (ambienceEnabled ? "SÍ" : "NO"), "DIFICULTAD: " + new[] { "FÁCIL", "NORMAL", "DIFÍCIL" }[selectedDifficulty], "CERRAR" };
-        int found = 0;
-        foreach (TMP_Text text in texts) if (text.text != "AJUSTES" && found < values.Length) text.text = values[found++];
+        if (settingsValues == null || settingsValues.Length < 4) return;
+        settingsValues[0].text = selectedLevel.ToString();
+        settingsValues[1].text = volume > 0f ? "SÍ" : "NO";
+        settingsValues[2].text = ambienceEnabled ? "SÍ" : "NO";
+        settingsValues[3].text = new[] { "FÁCIL", "NORMAL", "DIFÍCIL" }[selectedDifficulty];
     }
-    private void ReturnToMenu() { Time.timeScale = 1f; SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex); }
+
+    private void ReturnToMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
 
     public void ObjetoPaso()
     {
         if (gameOver) return;
         objectsPassed++;
-        if (objectsPassed >= 3)
+        if (objectsPassed < 3) return;
+
+        gameOver = true;
+        if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
+        if (settingsButtonRoot != null) settingsButtonRoot.SetActive(false);
+        if (gameplayHud != null) gameplayHud.SetActive(false);
+        if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(false);
+        ConfigureGameOverScreen();
+        if (gameOverRoot != null) gameOverRoot.SetActive(true);
+        if (Time.timeScale != 0f) Time.timeScale = 0f;
+    }
+
+    private void ConfigureGameOverScreen()
+    {
+        if (imagenGameOver != null)
         {
-            gameOver = true;
-            if (pauseButtonRoot != null) pauseButtonRoot.SetActive(false);
-            if (settingsButtonRoot != null) settingsButtonRoot.SetActive(false);
-            if (welcomeMenuRoot != null) welcomeMenuRoot.SetActive(false);
-            if (gameOverRoot != null) gameOverRoot.SetActive(true);
-            if (gameOverText != null) gameOverText.gameObject.SetActive(true);
-            if (restartButton != null) restartButton.SetActive(true);
-            if (imagenGameOver != null) imagenGameOver.gameObject.SetActive(true);
-            Time.timeScale = 0f;
+            imagenGameOver.gameObject.SetActive(true);
+            imagenGameOver.color = new Color(0.015f, 0.02f, 0.03f, 0.62f);
+            Stretch(imagenGameOver.rectTransform);
+        }
+
+        if (gameOverRoot != null)
+        {
+            Transform card = gameOverRoot.transform.Find("Game Over Card");
+            if (card != null) card.gameObject.SetActive(false);
+        }
+
+        if (gameOverText != null)
+        {
+            gameOverText.gameObject.SetActive(true);
+            gameOverText.text = "GAME OVER";
+            SetRect(gameOverText.rectTransform, new Vector2(0f, 130f), new Vector2(1000f, 130f));
+            StyleText(gameOverText, 92f, Gold, TextAlignmentOptions.Center, true);
+        }
+
+        if (restartButton != null)
+        {
+            restartButton.SetActive(true);
+            SetRect(restartButton.GetComponent<RectTransform>(), new Vector2(0f, -100f), new Vector2(470f, 92f));
+            Image image = restartButton.GetComponent<Image>();
+            if (image != null) { image.sprite = null; image.color = Panel; }
+            AddAngularFrame(restartButton.transform, 4f, 0.16f);
+            TMP_Text label = restartButton.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+            {
+                label.gameObject.SetActive(true);
+                label.text = "JUGAR DE NUEVO";
+                StyleText(label, 40f, Gold, TextAlignmentOptions.Center, true);
+            }
         }
     }
 
