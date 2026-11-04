@@ -24,6 +24,18 @@ public static class HunterFoodVFX
         Burst(position + Vector3.up * 0.35f, new Color(1f, 0.96f, 0.72f, 1f), 20, 0.14f, 1.6f, 1.5f);
     }
 
+    public static void FoxDust(Vector3 position)
+    {
+        Burst(position, new Color(0.55f, 0.48f, 0.34f, 0.55f), 4, 0.2f, 0.35f, 0.55f);
+    }
+
+    public static void FoxWarning(Vector3 position)
+    {
+        Color warning = new Color(1f, 0.16f, 0.08f, 1f);
+        ShowText(position, "!", warning, 0.65f);
+        Burst(position, warning, 6, 0.12f, 0.7f, 0.42f);
+    }
+
     public static void FoodCollected(Vector3 worldPosition, TMP_Text counter)
     {
         if (counter == null) return;
@@ -108,13 +120,18 @@ public static class HunterFoodVFX
 
     private static void ShowHeart(Vector3 position)
     {
+        ShowText(position, "♥", new Color(1f, 0.82f, 0.16f, 1f), 0.8f);
+    }
+
+    private static void ShowText(Vector3 position, string value, Color color, float lifetime)
+    {
         GameObject heartObject = new GameObject("Satisfied Heart Reaction");
         heartObject.transform.position = position;
 
         TextMeshPro heart = heartObject.AddComponent<TextMeshPro>();
-        heart.text = "♥";
-        heart.fontSize = 5f;
-        heart.color = new Color(1f, 0.82f, 0.16f, 1f);
+        heart.text = value;
+        heart.fontSize = value == "!" ? 4f : 5f;
+        heart.color = color;
         heart.alignment = TextAlignmentOptions.Center;
         heart.outlineColor = Color.black;
         heart.outlineWidth = 0.12f;
@@ -124,7 +141,7 @@ public static class HunterFoodVFX
         if (mainCamera != null)
             heartObject.transform.rotation = mainCamera.transform.rotation;
 
-        Object.Destroy(heartObject, 0.8f);
+        Object.Destroy(heartObject, lifetime);
     }
 
     private static Material GetParticleMaterial()

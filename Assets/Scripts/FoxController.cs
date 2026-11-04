@@ -6,6 +6,9 @@ public class FoxController : MonoBehaviour
     private float speed;
     private float exitX;
     private Rigidbody foxBody;
+    private readonly Collider[] nearbyAppleColliders = new Collider[24];
+    private float dustTimer;
+    private float warningCooldown;
 
     void Awake()
     {
@@ -45,6 +48,20 @@ public class FoxController : MonoBehaviour
         Vector3 nextPosition = foxBody.position + travelDirection * (speed * Time.fixedDeltaTime);
         foxBody.MovePosition(nextPosition);
 
+        dustTimer += Time.fixedDeltaTime;
+        if (dustTimer >= 0.18f)
+        {
+            dustTimer = 0f;
+            HunterFoodVFX.FoxDust(foxBody.position - travelDirection * 0.55f + Vector3.up * 0.12f);
+        }
+
+        warningCooldown -= Time.fixedDeltaTime;
+        if (warningCooldown <= 0f && HasNearbyApple())
+        {
+            warningCooldown = 1.1f;
+            HunterFoodVFX.FoxWarning(transform.position + Vector3.up * 1.4f);
+        }
+
         if ((travelDirection.x > 0f && nextPosition.x >= exitX) ||
             (travelDirection.x < 0f && nextPosition.x <= exitX))
         {
@@ -60,6 +77,22 @@ public class FoxController : MonoBehaviour
         {
             Destroy(appleBody.gameObject);
         }
+    }
+
+    private bool HasNearbyApple()
+    {
+        int count = Physics.OverlapSphereNonAlloc(transform.position, 4.2f, nearbyAppleColliders);
+        for (int i = 0; i < count; i++)
+        {
+            Collider nearby = nearbyAppleColliders[i];
+            if (nearby == null) continue;
+
+            Rigidbody appleBody = nearby.attachedRigidbody;
+            if ((appleBody != null && appleBody.GetComponent<MoveFoward>() != null) ||
+                nearby.GetComponent<MoveFoward>() != null)
+                return true;
+        }
+        return false;
     }
 
     void AddCollisionCollider()
